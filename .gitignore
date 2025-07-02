@@ -23,9 +23,21 @@ build/
 .DS_Store
 Thumbs.db
 
-# Environment variables
+# Environment variables and secrets
 .env
 .env.*
+!.env.example
+secrets/
+*.pem
+*.key
+id_*
+*.pub
+.ssh/
+config/secrets/
 
 # Logs
-*.log 
+*.log
+
+# Local configuration
+config/local/
+local_settings.py 
