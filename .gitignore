@@ -40,4 +40,13 @@ config/secrets/
 
 # Local configuration
 config/local/
-local_settings.py 
+local_settings.py
+
+# Ansible
+ansible/inventory/hosts.yml
+ansible/inventory/*.retry
+ansible/*.retry
+ansible/group_vars/*
+!ansible/group_vars/*.example
+ansible/host_vars/*
+!ansible/host_vars/*.example 
