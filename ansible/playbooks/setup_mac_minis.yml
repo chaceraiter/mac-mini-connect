@@ -1,7 +1,26 @@
 ---
 - name: Setup Mac Minis for distributed ML
   hosts: mac_minis
-  gather_facts: yes
+  gather_facts: no  # Initially disable fact gathering until we confirm connection
+
+  pre_tasks:
+    - name: Wait for SSH to be available
+      wait_for:
+        host: "{{ ansible_host }}"
+        port: 22
+        state: started
+        delay: 10
+        timeout: 60
+      delegate_to: localhost
+      
+    - name: Ensure host key is in known_hosts
+      shell: ssh-keyscan -H {{ ansible_host }} >> ~/.ssh/known_hosts
+      delegate_to: localhost
+      run_once: true
+      
+    - name: Gather facts
+      setup:
+      
   tasks:
     - name: Install Homebrew
       shell: |
@@ -35,5 +54,5 @@
     - name: Create Python virtual environment
       pip:
         virtualenv: "{{ projects_root }}/mac-mini-connect/venv"
-        virtualenv_command: python3.10 -m venv
+        virtualenv_command: /opt/homebrew/bin/python3.10 -m venv
         requirements: "{{ projects_root }}/mac-mini-connect/requirements.txt"
