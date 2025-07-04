@@ -1,0 +1,53 @@
+---
+- name: Update Mac Minis
+  hosts: mac_minis
+  gather_facts: yes
+  tasks:
+    - name: Update Homebrew
+      shell: brew update
+      register: brew_update
+      changed_when: brew_update.stdout != ""
+
+    - name: Upgrade Homebrew packages
+      shell: brew upgrade
+      register: brew_upgrade
+      changed_when: brew_upgrade.stdout != ""
+
+    - name: Update project repository
+      git:
+        repo: "{{ repo_url }}"
+        dest: "{{ projects_root }}/mac-mini-connect"
+        update: yes
+        force: no
+
+    - name: Ensure Python virtual environment exists
+      stat:
+        path: "{{ projects_root }}/mac-mini-connect/venv"
+      register: venv_check
+
+    - name: Update pip in virtual environment
+      pip:
+        name: pip
+        state: latest
+        virtualenv: "{{ projects_root }}/mac-mini-connect/venv"
+      when: venv_check.stat.exists
+
+    - name: Update Python dependencies
+      pip:
+        requirements: "{{ projects_root }}/mac-mini-connect/requirements.txt"
+        state: latest
+        virtualenv: "{{ projects_root }}/mac-mini-connect/venv"
+      when: venv_check.stat.exists
+
+    - name: Check Python package versions
+      shell: |
+        source {{ projects_root }}/mac-mini-connect/venv/bin/activate
+        pip list
+      register: pip_list
+      changed_when: false
+      when: venv_check.stat.exists
+
+    - name: Display installed package versions
+      debug:
+        var: pip_list.stdout_lines
+      when: venv_check.stat.exists 
