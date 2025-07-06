@@ -37,6 +37,7 @@ config/secrets/
 
 # Logs
 *.log
+troubleshooting_logs/DETAILED_TROUBLESHOOTING_SUMMARY.md
 
 # Local configuration
 config/local/
