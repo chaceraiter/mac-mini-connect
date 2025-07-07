@@ -8,7 +8,7 @@ sleep 2
 
 # Start master node (mini-red) first
 echo "Starting master node (mini-red)..."
-ssh mini-red "cd /Users/mini-red/projects/mac-mini-connect && source venv/bin/activate && python src/test_sharding.py" 2>&1 | tee mini-red.log &
+ssh mini-red "cd /Users/mini-red/projects/mac-mini-connect && source venv/bin/activate && python src/tests/test_sharding.py" 2>&1 | tee mini-red.log &
 MASTER_PID=$!
 
 # Give master node time to start up
@@ -17,7 +17,7 @@ sleep 5
 
 # Start worker node (mini-yellow)
 echo "Starting worker node (mini-yellow)..."
-ssh mini-yellow "cd /Users/mini-yellow/projects/mac-mini-connect && source venv/bin/activate && python src/test_sharding.py" 2>&1 | tee mini-yellow.log &
+ssh mini-yellow "cd /Users/mini-yellow/projects/mac-mini-connect && source venv/bin/activate && python src/tests/test_sharding.py" 2>&1 | tee mini-yellow.log &
 WORKER_PID=$!
 
 # Wait for both to finish
