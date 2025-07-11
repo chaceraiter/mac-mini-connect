@@ -51,3 +51,5 @@ ansible/group_vars/*
 !ansible/group_vars/*.example
 ansible/host_vars/*
 !ansible/host_vars/*.example 
+# Local troubleshooting scripts
+scripts/troubleshooting/discover_devices.sh 
