@@ -4,10 +4,12 @@ Test script for model sharding across devices.
 import torch
 import torch.distributed as dist
 from transformers import AutoTokenizer
+from transformers import AutoConfig
 
 from src.common.config import get_node_config, MODEL_CONFIG
 from src.common.distributed import setup_distributed, cleanup_distributed
 from src.common.model_sharding import load_partial_model, forward_sequence
+from src.common.utils import get_nested_attr
 
 def log(msg):
     """Helper to ensure logs are flushed immediately"""
@@ -43,44 +45,45 @@ def main():
         input_ids = tokenizer(text, return_tensors="pt").input_ids.to(MODEL_CONFIG["device"])
         log(f"Input shape: {input_ids.shape}")
         
-        # Process through pipeline
-        hidden_states = input_ids
-        
-        # Forward pass through each node in sequence
-        for rank in range(node_config.world_size):
-            log(f"Processing rank {rank}")
-            # Only the active rank processes
-            if node_config.rank == rank:
-                log(f"Node {node_config.name} processing...")
-                hidden_states = forward_sequence(model, hidden_states, node_config)
-                log(f"Node {node_config.name} processing complete")
-                log(f"Output shape: {hidden_states.shape}")
+        # --- Pipeline Execution ---
+        if node_config.rank == 0:
+            # Rank 0 starts with token IDs and gets intermediate hidden states
+            log("Rank 0: Executing forward pass...")
+            hidden_states = forward_sequence(model, input_ids, node_config)
+            log(f"Rank 0: Output shape: {hidden_states.shape}")
             
-            # Broadcast result to all nodes
-            if rank < node_config.world_size - 1:
-                if node_config.rank == rank:
-                    # Ensure tensor is contiguous before sending
-                    hidden_states = hidden_states.contiguous()
-                else:
-                    # On non-sender nodes, create a placeholder tensor to receive the broadcast
-                    # The shape comes from the output of the previous stage's layers.
-                    hidden_size = model.config.hidden_size
-                    hidden_states = torch.empty(
-                        hidden_states.shape[0], hidden_states.shape[1], hidden_size,
-                        dtype=getattr(torch, MODEL_CONFIG["dtype"]),
-                        device=MODEL_CONFIG["device"]
-                    )
+            # Send hidden states to the next node
+            log("Rank 0: Broadcasting hidden states to Rank 1...")
+            dist.broadcast(hidden_states, src=0)
+            log("Rank 0: Broadcast complete.")
 
-                log(f"Broadcasting from rank {rank}")
-                dist.broadcast(hidden_states, rank)
-                log(f"Broadcast complete")
-        
-        # Only last node has the final logits
-        if node_config.rank == node_config.world_size - 1:
-            next_token = torch.argmax(hidden_states[0, -1])
+        elif node_config.rank == 1:
+            # Rank 1 needs a placeholder to receive the hidden states
+            config = AutoConfig.from_pretrained(model_name)
+            hidden_size = get_nested_attr(config, MODEL_CONFIG["model_arch_config"]["hidden_size_path"])
+            # Shape: [batch_size, sequence_length, hidden_size]
+            placeholder_shape = (input_ids.shape[0], input_ids.shape[1], hidden_size)
+            hidden_states = torch.empty(
+                placeholder_shape,
+                dtype=getattr(torch, MODEL_CONFIG["dtype"]),
+                device=MODEL_CONFIG["device"]
+            )
+            
+            # Receive hidden states from the previous node
+            log("Rank 1: Waiting to receive hidden states from Rank 0...")
+            dist.broadcast(hidden_states, src=0)
+            log("Rank 1: Received hidden states.")
+
+            # Rank 1 processes the hidden states to get final logits
+            log("Rank 1: Executing forward pass...")
+            logits = forward_sequence(model, hidden_states, node_config)
+            log(f"Rank 1: Output logits shape: {logits.shape}")
+            
+            # Decode the result
+            next_token = torch.argmax(logits[0, -1])
             next_word = tokenizer.decode(next_token)
-            log(f"Input: {text}")
-            log(f"Next word prediction: {next_word}")
+            log(f"Input: '{text}'")
+            log(f"Next word prediction: '{next_word}'")
     
     except Exception as e:
         log(f"Error: {str(e)}")

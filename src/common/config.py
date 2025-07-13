@@ -32,12 +32,33 @@ NODES: Dict[str, NodeConfig] = {
     )
 }
 
-# Model configurations
-MODEL_CONFIG = {
-    "model_name": "gpt2",  # Standard model, no projection layer.
-    "device": "mps",  # Metal Performance Shaders for Apple Silicon
-    "dtype": "float16",  # Mixed precision for better performance
+# --- Model Agnostic Refactor ---
+
+# A registry to hold the architectural details for different model families.
+# This allows the sharding and pipeline logic to be generic.
+MODEL_REGISTRY = {
+    "gpt2": {
+        "num_layers_path": "n_layer",
+        "hidden_size_path": "n_embd",
+        "layers_path": "transformer.h",
+        "embedding_path": "transformer.wte",
+        "positional_embedding_path": "transformer.wpe",
+        "final_norm_path": "transformer.ln_f",
+        "lm_head_path": "lm_head",
+    },
 }
+
+# Select the model to be used for the run
+CURRENT_MODEL = "gpt2"
+
+# Model configurations, now dynamically loaded from the registry
+MODEL_CONFIG = {
+    "model_name": CURRENT_MODEL,
+    "model_arch_config": MODEL_REGISTRY[CURRENT_MODEL],
+    "device": "mps",
+    "dtype": "float16",
+}
+
 
 def get_node_config() -> NodeConfig:
     """
