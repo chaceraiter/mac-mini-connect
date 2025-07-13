@@ -22,42 +22,32 @@ def get_layer_ranges(total_layers: int, world_size: int) -> List[Tuple[int, int]
     return ranges
 
 def load_partial_model(
-    model_name: str,
     node_config: NodeConfig,
     device: Optional[str] = None
 ) -> nn.Module:
     """
-    Load only the layers assigned to this node.
-    
-    Args:
-        model_name: HuggingFace model name
-        node_config: Configuration for this node
-        device: Device to place model on (default: from MODEL_CONFIG)
+    Load only the layers assigned to this node, adapted for GPT-2 architecture.
     """
+    model_name = MODEL_CONFIG["model_name"]
     device = device or MODEL_CONFIG["device"]
     dtype = getattr(torch, MODEL_CONFIG["dtype"])
     
-    # First get model config to know number of layers
     config = AutoConfig.from_pretrained(model_name)
     num_layers = config.num_hidden_layers
     
-    # Calculate which layers belong to this node
     ranges = get_layer_ranges(num_layers, node_config.world_size)
     my_start, my_end = ranges[node_config.rank]
     
     print(f"Node {node_config.name} loading layers {my_start} to {my_end}")
     
-    # Load full model config but modify for partial layers
     partial_config = AutoConfig.from_pretrained(
         model_name,
         num_hidden_layers=my_end - my_start,
         torch_dtype=dtype,
     )
     
-    # Initialize a partial model with modified config
     model = AutoModelForCausalLM.from_config(partial_config)
     
-    # Load pretrained weights for our layers only
     full_model = AutoModelForCausalLM.from_pretrained(
         model_name,
         config=config,
@@ -65,21 +55,23 @@ def load_partial_model(
         low_cpu_mem_usage=True,
     )
     
-    # Copy weights for our layers
+    # Copy weights for our layers (using GPT-2's `transformer.h` structure)
     for i, layer_i in enumerate(range(my_start, my_end)):
-        model.model.decoder.layers[i].load_state_dict(
-            full_model.model.decoder.layers[layer_i].state_dict()
+        model.transformer.h[i].load_state_dict(
+            full_model.transformer.h[layer_i].state_dict()
         )
     
-    # Copy embeddings only to first node and output layer only to last node
+    # First node gets token and position embeddings (`wte`, `wpe`)
     if node_config.rank == 0:
-        model.model.decoder.embed_tokens = full_model.model.decoder.embed_tokens
-        model.model.decoder.embed_positions = full_model.model.decoder.embed_positions
+        model.transformer.wte = full_model.transformer.wte
+        model.transformer.wpe = full_model.transformer.wpe
+
+    # Last node gets the final layer norm and language model head
     if node_config.rank == node_config.world_size - 1:
-        model.model.decoder.final_layer_norm = full_model.model.decoder.final_layer_norm
+        model.transformer.ln_f = full_model.transformer.ln_f
         model.lm_head = full_model.lm_head
     
-    del full_model  # Free up memory
+    del full_model
     
     return model.to(device)
 
@@ -89,42 +81,29 @@ def forward_sequence(
     node_config: NodeConfig
 ) -> torch.Tensor:
     """
-    Forward pass handling the pipeline between nodes.
-    
-    Args:
-        model: The partial model on this node
-        input_ids: Input token IDs
-        node_config: Configuration for this node
+    Forward pass handling the pipeline between nodes, adapted for GPT-2.
     """
     # First node: process embeddings
     if node_config.rank == 0:
-        # Create attention mask (1 for all tokens since we're not doing padding)
-        attention_mask = torch.ones_like(input_ids)
-        
-        # Get embeddings
-        hidden_states = model.model.decoder.embed_tokens(input_ids)
-        
-        # Add positional embeddings
-        position_ids = torch.arange(input_ids.size(1), device=input_ids.device).unsqueeze(0)
-        hidden_states = hidden_states + model.model.decoder.embed_positions(position_ids)
+        # Get token and positional embeddings
+        token_embeddings = model.transformer.wte(input_ids)
+        position_ids = torch.arange(0, input_ids.size(1), device=input_ids.device).unsqueeze(0)
+        position_embeddings = model.transformer.wpe(position_ids)
+        hidden_states = token_embeddings + position_embeddings
     else:
         hidden_states = input_ids
     
-    # Process our layers
-    for layer in model.model.decoder.layers:
+    # Process our layers (using GPT-2's `transformer.h` structure)
+    for layer in model.transformer.h:
         layer_outputs = layer(
             hidden_states,
-            attention_mask=None,  # Not needed for OPT in this simple case
-            layer_head_mask=None,
-            past_key_value=None,
             use_cache=False,
-            output_attentions=False
         )
         hidden_states = layer_outputs[0]
     
-    # Last node: process final layers and get logits
+    # Last node: process final layer and get logits
     if node_config.rank == node_config.world_size - 1:
-        hidden_states = model.model.decoder.final_layer_norm(hidden_states)
+        hidden_states = model.transformer.ln_f(hidden_states)
         logits = model.lm_head(hidden_states)
         return logits
     

@@ -4,11 +4,10 @@ Test script for model sharding across devices.
 import torch
 import torch.distributed as dist
 from transformers import AutoTokenizer
-import sys
 
-from common.config import get_node_config, MODEL_CONFIG
-from common.distributed import setup_distributed, cleanup_distributed
-from common.model_sharding import load_partial_model, forward_sequence
+from src.common.config import get_node_config, MODEL_CONFIG
+from src.common.distributed import setup_distributed, cleanup_distributed
+from src.common.model_sharding import load_partial_model, forward_sequence
 
 def log(msg):
     """Helper to ensure logs are flushed immediately"""
@@ -25,9 +24,9 @@ def main():
         setup_distributed(node_config)
         log("Distributed setup complete")
         
-        # For testing, let's use a smaller model first
-        model_name = "facebook/opt-350m"
-        log(f"Loading tokenizer on {node_config.name}...")
+        # Use the model defined in the central config
+        model_name = MODEL_CONFIG["model_name"]
+        log(f"Loading tokenizer for {model_name} on {node_config.name}...")
         
         # Load tokenizer on all nodes (small enough to replicate)
         tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -35,7 +34,7 @@ def main():
         
         log(f"Loading partial model on {node_config.name}...")
         # Load partial model on each node
-        model = load_partial_model(model_name, node_config)
+        model = load_partial_model(node_config)
         log("Model loaded")
         
         # Test input
@@ -59,8 +58,20 @@ def main():
             
             # Broadcast result to all nodes
             if rank < node_config.world_size - 1:
+                if node_config.rank == rank:
+                    # Ensure tensor is contiguous before sending
+                    hidden_states = hidden_states.contiguous()
+                else:
+                    # On non-sender nodes, create a placeholder tensor to receive the broadcast
+                    # The shape comes from the output of the previous stage's layers.
+                    hidden_size = model.config.hidden_size
+                    hidden_states = torch.empty(
+                        hidden_states.shape[0], hidden_states.shape[1], hidden_size,
+                        dtype=getattr(torch, MODEL_CONFIG["dtype"]),
+                        device=MODEL_CONFIG["device"]
+                    )
+
                 log(f"Broadcasting from rank {rank}")
-                hidden_states = hidden_states.contiguous()
                 dist.broadcast(hidden_states, rank)
                 log(f"Broadcast complete")
         

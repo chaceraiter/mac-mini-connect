@@ -41,6 +41,11 @@
         name: python@3.10
         state: present
 
+    - name: Install Git LFS for large model support
+      homebrew:
+        name: git-lfs
+        state: present
+
     - name: Create projects directory
       file:
         path: "{{ projects_root }}"

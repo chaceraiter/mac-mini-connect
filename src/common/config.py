@@ -28,33 +28,31 @@ NODES: Dict[str, NodeConfig] = {
         name="mini-yellow",
         address="192.168.2.224",
         rank=1,  # Worker node
+        master_addr="192.168.2.171", # Must point to the master node
     )
 }
 
 # Model configurations
 MODEL_CONFIG = {
-    "model_name": "facebook/opt-350m",  # Starting with a smaller model for testing
+    "model_name": "gpt2",  # Standard model, no projection layer.
     "device": "mps",  # Metal Performance Shaders for Apple Silicon
     "dtype": "float16",  # Mixed precision for better performance
 }
 
 def get_node_config() -> NodeConfig:
     """
-    Get the configuration for the current node based on hostname.
+    Get the configuration for the current node based on the NODE_NAME env var.
     Returns:
         NodeConfig: Configuration for this node
     Raises:
-        ValueError: If hostname doesn't match any configured node
+        ValueError: If NODE_NAME is not set or invalid
     """
-    hostname = socket.gethostname().split('.')[0]  # Get short hostname
+    import os
+    node_name = os.environ.get("NODE_NAME")
+    if not node_name:
+        raise ValueError("The NODE_NAME environment variable must be set (e.g., 'mini-red', 'mini-yellow').")
+        
+    if node_name in NODES:
+        return NODES[node_name]
     
-    # Try exact match first
-    if hostname in NODES:
-        return NODES[hostname]
-    
-    # Try matching by prefix (in case hostname has additional suffixes)
-    for name, config in NODES.items():
-        if hostname.startswith(name):
-            return config
-    
-    raise ValueError(f"No configuration found for hostname: {hostname}") 
+    raise ValueError(f"No configuration found for node name: {node_name}") 

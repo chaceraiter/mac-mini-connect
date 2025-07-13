@@ -1,22 +1,27 @@
-# Project Roadmap: Mac Mini Connect
+# Roadmap
 
-This document outlines the development plan, goals, and future vision for the Mac Mini Connect project.
+## Current Status & Next Actions
 
-## 1. Project Vision
+**Context:** The primary goal is to run a distributed PyTorch application across two Mac Minis, `mini-red` (master) and `mini-yellow` (worker). After resolving initial connectivity issues, we've been blocked by a persistent `ModuleNotFoundError: No module named 'common'` when running the test script (`src/tests/test_sharding.py`).
+
+**Exhaustive Debugging Summary:**
+1.  **Package Structure:** Confirmed the project is a proper Python package with `__init__.py` files.
+2.  **Execution Method:** Switched to the standard `python -m src.tests.test_sharding` invocation.
+3.  **Environment Variable:** Explicitly set `PYTHONPATH` in various ways (`$PWD`, absolute paths) to point to the project root.
+4.  **Python Interpreter:** Identified that the minis were using the system's problematic `/usr/bin/python3`. We rebuilt the virtual environments from scratch using a stable Homebrew Python (`/opt/homebrew/bin/python3.10`) via an Ansible playbook.
+
+**Diagnosis:** Despite these corrective actions, the `ModuleNotFoundError` persists. We've concluded that the remote shell environment on the Mac Minis is fundamentally unreliable and is likely ignoring, unsetting, or misinterpreting the `PYTHONPATH` variable.
+
+**Immediate Plan:**
+*   **Implement a programmatic workaround:** Modify the Python test script (`src/tests/test_sharding.py`) to programmatically add the project's root directory to `sys.path`. This will make the script self-sufficient, bypassing the problematic remote shell environment and ensuring that local modules like `common` can be found reliably.
+
+***
+
+## Phase 1: Foundational Setup (Complete)
 
 To create a robust and observable distributed computing environment using two Mac Minis, capable of running and monitoring parallel processing tasks efficiently. The ultimate goal is to have a stable platform for experimenting with distributed machine learning models and other parallel workloads.
 
 ## 2. Current State (as of late 2024)
-
-- **Network Foundation**: Successfully established reliable network connectivity between `mini-red` (master) and `mini-yellow` (worker).
-- **Environment**: Python virtual environments (`venv`) are set up on both machines with necessary dependencies.
-- **Deployment**: A `sync.sh` script is in place to synchronize the project codebase from the local development machine to both minis.
-- **Core Test**: A basic PyTorch distributed sharding test (`test_sharding.py`) is confirmed to run successfully across the two-node cluster.
-- **Troubleshooting**: Extensive network debugging has been performed and documented, resolving initial connectivity issues.
-
-## 3. Short-Term Goals (Immediate Next Steps)
-
-These are the tasks to be tackled next to build upon the current foundation.
 
 -   [ ] **Run the Primary Application**: Execute the main `run_distributed.py` application and ensure it runs to completion without errors.
 -   [ ] **Basic Benchmarking**: Measure the baseline performance of the `run_distributed.py` application (e.g., total execution time).
