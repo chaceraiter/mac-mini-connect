@@ -60,7 +60,7 @@ def main():
         elif node_config.rank == 1:
             # Rank 1 needs a placeholder to receive the hidden states
             config = AutoConfig.from_pretrained(model_name)
-            hidden_size = get_nested_attr(config, MODEL_CONFIG["model_arch_config"]["hidden_size_path"])
+            hidden_size = get_nested_attr(config, MODEL_CONFIG["model_arch_config"]["hidden_size_key"])
             # Shape: [batch_size, sequence_length, hidden_size]
             placeholder_shape = (input_ids.shape[0], input_ids.shape[1], hidden_size)
             hidden_states = torch.empty(

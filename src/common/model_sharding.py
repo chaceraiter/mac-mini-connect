@@ -30,7 +30,7 @@ def load_partial_model(node_config: NodeConfig, device: Optional[str] = None) ->
     dtype = getattr(torch, MODEL_CONFIG["dtype"])
 
     config = AutoConfig.from_pretrained(model_name)
-    num_layers = get_nested_attr(config, arch_config["num_layers_path"])
+    num_layers = get_nested_attr(config, arch_config["num_layers_key"])
 
     ranges = get_layer_ranges(num_layers, node_config.world_size)
     my_start, my_end = ranges[node_config.rank]

@@ -38,8 +38,8 @@ NODES: Dict[str, NodeConfig] = {
 # This allows the sharding and pipeline logic to be generic.
 MODEL_REGISTRY = {
     "gpt2": {
-        "num_layers_path": "n_layer",
-        "hidden_size_path": "n_embd",
+        "num_layers_key": "n_layer",
+        "hidden_size_key": "n_embd",
         "layers_path": "transformer.h",
         "embedding_path": "transformer.wte",
         "positional_embedding_path": "transformer.wpe",
@@ -47,12 +47,39 @@ MODEL_REGISTRY = {
         "lm_head_path": "lm_head",
     },
     "distilgpt2": {
-        "num_layers_path": "n_layer",
-        "hidden_size_path": "n_embd",
+        "num_layers_key": "n_layer",
+        "hidden_size_key": "n_embd",
         "layers_path": "transformer.h",
         "embedding_path": "transformer.wte",
         "positional_embedding_path": "transformer.wpe",
         "final_norm_path": "transformer.ln_f",
+        "lm_head_path": "lm_head",
+    },
+    "gpt2-medium": {
+        "num_layers_key": "n_layer",
+        "hidden_size_key": "n_embd",
+        "layers_path": "transformer.h",
+        "embedding_path": "transformer.wte",
+        "positional_embedding_path": "transformer.wpe",
+        "final_norm_path": "transformer.ln_f",
+        "lm_head_path": "lm_head",
+    },
+    "facebook/opt-125m": {
+        "num_layers_key": "num_hidden_layers",
+        "hidden_size_key": "hidden_size",
+        "layers_path": "model.decoder.layers",
+        "embedding_path": "model.decoder.embed_tokens",
+        "positional_embedding_path": "model.decoder.embed_positions",
+        "final_norm_path": "model.decoder.final_layer_norm",
+        "lm_head_path": "lm_head",
+    },
+    "facebook/opt-350m": {
+        "num_layers_key": "num_hidden_layers",
+        "hidden_size_key": "hidden_size",
+        "layers_path": "model.decoder.layers",
+        "embedding_path": "model.decoder.embed_tokens",
+        "positional_embedding_path": "model.decoder.embed_positions",
+        "final_norm_path": "model.decoder.final_layer_norm",
         "lm_head_path": "lm_head",
     },
 }

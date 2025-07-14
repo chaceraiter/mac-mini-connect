@@ -9,6 +9,10 @@ sleep 2
 # Define the project directory on the remote hosts
 REMOTE_PROJECT_DIR="~/projects/mac-mini-connect"
 
+# Set the model name
+export MODEL_NAME="gpt2-medium"
+export TEXT="Hello, my name is"
+
 # Start master node (mini-red) first
 echo "Starting master node (mini-red)..."
 ssh mini-red@192.168.2.171 "export NODE_NAME=mini-red && export PYTORCH_ENABLE_MPS_FALLBACK=1 && cd ${REMOTE_PROJECT_DIR} && PYTHONPATH=${REMOTE_PROJECT_DIR} ${REMOTE_PROJECT_DIR}/venv/bin/python -m src.tests.test_sharding" 2>&1 | tee mini-red.log &
