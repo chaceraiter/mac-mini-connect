@@ -46,10 +46,19 @@ MODEL_REGISTRY = {
         "final_norm_path": "transformer.ln_f",
         "lm_head_path": "lm_head",
     },
+    "distilgpt2": {
+        "num_layers_path": "n_layer",
+        "hidden_size_path": "n_embd",
+        "layers_path": "transformer.h",
+        "embedding_path": "transformer.wte",
+        "positional_embedding_path": "transformer.wpe",
+        "final_norm_path": "transformer.ln_f",
+        "lm_head_path": "lm_head",
+    },
 }
 
 # Select the model to be used for the run
-CURRENT_MODEL = "gpt2"
+CURRENT_MODEL = "distilgpt2"
 
 # Model configurations, now dynamically loaded from the registry
 MODEL_CONFIG = {
