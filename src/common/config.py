@@ -82,6 +82,15 @@ MODEL_REGISTRY = {
         "final_norm_path": "transformer.ln_f",
         "lm_head_path": "lm_head",
     },
+    "EleutherAI/gpt-j-6B": {
+        "num_layers_key": "n_layer",
+        "hidden_size_key": "n_embd",
+        "layers_path": "transformer.h",
+        "embedding_path": "transformer.wte",
+        "positional_embedding_path": "transformer.wpe",
+        "final_norm_path": "transformer.ln_f",
+        "lm_head_path": "lm_head",
+    },
     "facebook/opt-125m": {
         "num_layers_key": "num_hidden_layers",
         "hidden_size_key": "hidden_size",
@@ -102,8 +111,10 @@ MODEL_REGISTRY = {
     },
 }
 
+import os
+
 # Select the model to be used for the run
-CURRENT_MODEL = "distilgpt2"
+CURRENT_MODEL = os.environ.get("MODEL_NAME", "distilgpt2")
 
 # Model configurations, now dynamically loaded from the registry
 MODEL_CONFIG = {
@@ -122,7 +133,6 @@ def get_node_config() -> NodeConfig:
     Raises:
         ValueError: If NODE_NAME is not set or invalid
     """
-    import os
     node_name = os.environ.get("NODE_NAME")
     if not node_name:
         raise ValueError("The NODE_NAME environment variable must be set (e.g., 'mini-red', 'mini-yellow').")

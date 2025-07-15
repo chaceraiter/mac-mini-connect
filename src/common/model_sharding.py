@@ -6,8 +6,13 @@ import torch
 from torch import nn
 from transformers import AutoModelForCausalLM, AutoConfig
 from typing import Optional, List, Tuple
+import datetime
 from .config import NodeConfig, MODEL_CONFIG
 from .utils import get_nested_attr, set_nested_attr
+
+def _log(rank, message):
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+    print(f"[{timestamp}] [{rank}] {message}", flush=True)
 
 def get_layer_ranges(total_layers: int, world_size: int) -> List[Tuple[int, int]]:
     """Calculate layer ranges for each device."""
@@ -35,15 +40,20 @@ def load_partial_model(node_config: NodeConfig, device: Optional[str] = None) ->
     ranges = get_layer_ranges(num_layers, node_config.world_size)
     my_start, my_end = ranges[node_config.rank]
     
-    print(f"Node {node_config.name} loading layers {my_start} to {my_end}")
+    _log(node_config.rank, f"Node {node_config.name} loading layers {my_start} to {my_end}")
 
+    _log(node_config.rank, "1. Downloading full model with from_pretrained...")
     full_model = AutoModelForCausalLM.from_pretrained(
         model_name, torch_dtype=dtype, low_cpu_mem_usage=True
     )
-    
+    _log(node_config.rank, "1. Download complete.")
+
+    _log(node_config.rank, "2. Deep-copying model structure...")
     import copy
     model = copy.deepcopy(full_model)
+    _log(node_config.rank, "2. Deep-copy complete.")
 
+    _log(node_config.rank, "3. Pruning unused layers...")
     all_layers = get_nested_attr(full_model, arch_config["layers_path"])
     
     layers_to_keep = all_layers[my_start:my_end]
@@ -63,8 +73,17 @@ def load_partial_model(node_config: NodeConfig, device: Optional[str] = None) ->
         if arch_config.get("project_out_path"):
             set_nested_attr(model, arch_config["project_out_path"], identity)
 
+    _log(node_config.rank, "3. Pruning complete.")
+
+    _log(node_config.rank, "4. Deleting full model to free memory...")
     del full_model, all_layers, layers_to_keep
-    return model.to(device)
+    _log(node_config.rank, "4. Deletion complete.")
+
+    _log(node_config.rank, f"5. Moving sharded model to device '{device}'...")
+    model = model.to(device)
+    _log(node_config.rank, "5. Move to device complete.")
+
+    return model
 
 def forward_sequence(model: nn.Module, inputs: torch.Tensor, node_config: NodeConfig) -> torch.Tensor:
     """
