@@ -6,8 +6,28 @@ import torch
 from torch import nn
 from transformers import AutoModelForCausalLM, AutoConfig
 from typing import Optional, List, Tuple
+import datetime
+import os
+import psutil
 from .config import NodeConfig, MODEL_CONFIG
 from .utils import get_nested_attr, set_nested_attr
+
+def _log(rank, message):
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+    print(f"[{timestamp}] [{rank}] {message}", flush=True)
+
+def check_cache(model_name: str) -> bool:
+    """Checks if a model is likely cached by Hugging Face."""
+    # This is a heuristic, not a guaranteed check.
+    # It checks for the presence of the model's snapshot directory.
+    try:
+        from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
+        from huggingface_hub.utils import hub_folder_name
+        
+        model_cache_path = os.path.join(HUGGINGFACE_HUB_CACHE, f"models--{hub_folder_name(repo_id=model_name)}")
+        return os.path.exists(model_cache_path)
+    except Exception as e:
+        return False # Fail safe
 
 def get_layer_ranges(total_layers: int, world_size: int) -> List[Tuple[int, int]]:
     """Calculate layer ranges for each device."""
@@ -35,15 +55,32 @@ def load_partial_model(node_config: NodeConfig, device: Optional[str] = None) ->
     ranges = get_layer_ranges(num_layers, node_config.world_size)
     my_start, my_end = ranges[node_config.rank]
     
-    print(f"Node {node_config.name} loading layers {my_start} to {my_end}")
+    _log(node_config.rank, f"Node {node_config.name} loading layers {my_start} to {my_end}")
 
+    is_cached = check_cache(model_name)
+    _log(node_config.rank, f"1a. Model '{model_name}' appears to be cached: {is_cached}")
+
+    # Log memory before loading
+    mem_before = psutil.virtual_memory()
+    _log(node_config.rank, f"1b. Memory before loading: {mem_before.used / (1024**3):.2f} GB used / {mem_before.total / (1024**3):.2f} GB total")
+
+    _log(node_config.rank, "1c. Loading full model with from_pretrained...")
     full_model = AutoModelForCausalLM.from_pretrained(
         model_name, torch_dtype=dtype, low_cpu_mem_usage=True
     )
-    
+    _log(node_config.rank, "1d. Model object created.")
+
+    # Log memory after loading
+    mem_after = psutil.virtual_memory()
+    _log(node_config.rank, f"1e. Memory after loading: {mem_after.used / (1024**3):.2f} GB used / {mem_after.total / (1024**3):.2f} GB total")
+    _log(node_config.rank, f"   -> Memory consumed by model load: {(mem_after.used - mem_before.used) / (1024**3):.2f} GB")
+
+    _log(node_config.rank, "2. Deep-copying model structure...")
     import copy
     model = copy.deepcopy(full_model)
+    _log(node_config.rank, "2. Deep-copy complete.")
 
+    _log(node_config.rank, "3. Pruning unused layers...")
     all_layers = get_nested_attr(full_model, arch_config["layers_path"])
     
     layers_to_keep = all_layers[my_start:my_end]
@@ -63,8 +100,17 @@ def load_partial_model(node_config: NodeConfig, device: Optional[str] = None) ->
         if arch_config.get("project_out_path"):
             set_nested_attr(model, arch_config["project_out_path"], identity)
 
+    _log(node_config.rank, "3. Pruning complete.")
+
+    _log(node_config.rank, "4. Deleting full model to free memory...")
     del full_model, all_layers, layers_to_keep
-    return model.to(device)
+    _log(node_config.rank, "4. Deletion complete.")
+
+    _log(node_config.rank, f"5. Moving sharded model to device '{device}'...")
+    model = model.to(device)
+    _log(node_config.rank, "5. Move to device complete.")
+
+    return model
 
 def forward_sequence(model: nn.Module, inputs: torch.Tensor, node_config: NodeConfig) -> torch.Tensor:
     """
