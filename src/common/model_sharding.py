@@ -17,17 +17,24 @@ def _log(rank, message):
     print(f"[{timestamp}] [{rank}] {message}", flush=True)
 
 def check_cache(model_name: str) -> bool:
-    """Checks if a model is likely cached by Hugging Face."""
-    # This is a heuristic, not a guaranteed check.
-    # It checks for the presence of the model's snapshot directory.
+    """
+    Checks if a model is fully cached locally by attempting a dry-run
+    download from the hub.
+    """
     try:
-        from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
-        from huggingface_hub.utils import hub_folder_name
-        
-        model_cache_path = os.path.join(HUGGINGFACE_HUB_CACHE, f"models--{hub_folder_name(repo_id=model_name)}")
-        return os.path.exists(model_cache_path)
-    except Exception as e:
-        return False # Fail safe
+        from huggingface_hub import snapshot_download
+        # Perform a dry-run download. If all files are cached, this will
+        # complete without error. If not, it will raise an exception.
+        # We also suppress the progress bar for a cleaner log.
+        snapshot_download(
+            repo_id=model_name,
+            local_files_only=True,
+            tqdm_class=None # Undocumented but effective way to suppress progress bar
+        )
+        return True
+    except Exception:
+        # Any exception (e.g., FileNotFoundError) means it's not fully cached.
+        return False
 
 def get_layer_ranges(total_layers: int, world_size: int) -> List[Tuple[int, int]]:
     """Calculate layer ranges for each device."""
