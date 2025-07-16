@@ -10,7 +10,7 @@ sleep 2
 REMOTE_PROJECT_DIR="~/projects/mac-mini-connect"
 
 # Set the model name
-export MODEL_NAME="gpt2"
+export MODEL_NAME="gpt2-medium"
 export TEXT="Hello, my name is"
 
 # Start master node (mini-red) first
